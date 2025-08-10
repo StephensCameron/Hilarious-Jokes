@@ -39,7 +39,7 @@ def main():
     print(f"Test set shape: {test_dataset.shape}")
 
     # Plot explained variance vs number of components
-    plot_explained_variance_vs_components(train_dataset,'explained_variance_vs_components.png')
+    plot_explained_variance_vs_components(train_dataset,'explained_variance_vs_components_partial.png')
     """If we apply the elbow method, we can see that the optimal number of clusters is around 4 or 5.
     One interpretation of this fact is that we have either 4 or 5 different types of jokes in the dataset."""
 
@@ -49,7 +49,7 @@ def main():
     """When we apply the same method to the transposed dataset, we are actually investigating the people who rated the jokes more than the jokes.
     From this plot, we could interpre that there are 6 or 7 different 'senses of humor' in the dataset."""
 
-    # here we will add clustering visualizations
+    # here I will add clustering visualizations
 
 
     ####### Predictive Model Section #######
@@ -66,8 +66,8 @@ def main():
     # now we can grid search for the optimal hyperparameters
     n_splits = [3, 5, 10]  # Different numbers of folds for cross-validation
     k_values = range(1, 16)  # Different numbers of components to try
-    results_df = grid_search_hyperparams(k_values, train_dataset_full, selected_indices,
-            complement_indices, 'grid_search_results_verA.png')
+    results_df = grid_search_hyperparams(k_values, n_splits, train_dataset_full, selected_indices,
+            complement_indices, 'Average_Training_and_Validation_Error_vs_k.png')
     
     optimal_hyperparams = results_df.loc[results_df['Avg_Val_Error'].idxmin()]
     print(f"Optimal Hyperparameters: k={optimal_hyperparams['k']}, n_splits={optimal_hyperparams['n_splits']}, "
@@ -95,6 +95,8 @@ def main():
     #Test Relative Error: 0.4357707780985749
     #Training Relative Error: 0.3663375252693526
     #The Model Performed: 2.81 % worse on the test set than on the validation set.
+
+    plot_grid_with_final_model_results(results_df, optimal_hyperparams, test_relative_error, 'final_model_test_results.png')
 
     """We expect the test error to be higher than the validation error, as the model has not seen the test data during training,
     though, I am surprised that the test error is only slightly higher than the validation error, it means that the model is generalizing well to unseen data.
@@ -177,7 +179,7 @@ def plot_explained_variance_vs_components(train_dataset, filename='explained_var
     # Plotting
     plt.figure(figsize=(6, 3))
     plt.plot(num_clusters, f_scores, marker='o')
-    plt.title('Explained Variance (Mean F-score) vs Number of Clusters')
+    plt.title('Explained Variance vs Number of Clusters')
     plt.xlabel('Number of Clusters')
     plt.ylabel('Mean ANOVA F-score')
     plt.grid(True)
@@ -270,7 +272,7 @@ def train_model(x_train, y_train, k):
 
 def evaluate_model(model, x_data, y_data):
     """
-    Evaluate the model on validation data.
+    Evaluate the model on validation data by calculating the relative error in the Frobenius norm.
     
     Parameters:
     model (numpy.ndarray): Model coefficients.
@@ -332,13 +334,14 @@ def cross_validate_model(data, selected_indices, complement_indices, k, n_splits
 
     return avg_model, avg_train_error, avg_val_error
 
-def grid_search_hyperparams(k_values, train_dataset_full, selected_indices, complement_indices,
+def grid_search_hyperparams(k_values, n_splits_list, train_dataset_full, selected_indices, complement_indices,
             filename='grid_search_results.png'):
     """
-    Perform a grid search over hyperparameters.
+    Perform a grid search over hyperparameters k_values and n_splits
     
     Parameters:
     k_values (list): List of number of components to test.
+    n_splits_list (list): List of number of folds for cross-validation.
     train_dataset_full (numpy.ndarray): Full training dataset.
     selected_indices (list): Indices of selected features.
     complement_indices (list): Indices of complementary features.
@@ -346,10 +349,10 @@ def grid_search_hyperparams(k_values, train_dataset_full, selected_indices, comp
     Returns:
     results_df (pd.DataFrame): DataFrame containing the results of the grid search.
     """
-    n_splits_values = [3, 5, 10]  # Test different numbers of folds
+    
     results = []
     for k in k_values:
-        for n_splits in n_splits_values:
+        for n_splits in n_splits_list:
             avg_model, avg_train_error, avg_val_error = cross_validate_model(
                 train_dataset_full, selected_indices, complement_indices, k, n_splits
             )
@@ -362,7 +365,7 @@ def grid_search_hyperparams(k_values, train_dataset_full, selected_indices, comp
 
     # we can make some plots to visualize the results by plotting the average validation and training errors for each k, separated for each n_splits value
     fig, ax = plt.subplots(figsize=(10, 4))
-    for n_splits in n_splits_values:
+    for n_splits in n_splits_list:
         subset = results_df[results_df['n_splits'] == n_splits]
         ax.plot(subset['k'], subset['Avg_Train_Error'], marker='o', label=f'Train Error (n_splits={n_splits})')
         ax.plot(subset['k'], subset['Avg_Val_Error'], marker='o', linestyle='--', label=f'Val Error (n_splits={n_splits})')
@@ -378,6 +381,37 @@ def grid_search_hyperparams(k_values, train_dataset_full, selected_indices, comp
     plt.show()
 
     return results_df
+
+def plot_grid_with_final_model_results(results_df, optimal_hyperparams, final_model_error, filename='final_model_results.png'):
+    """
+    Plot the grid search results with the final model results.
+    
+    Parameters:
+    results_df (pd.DataFrame): DataFrame containing the results of the grid search.
+    optimal_hyperparams (pd.DataFrame): Optimal hyperparameters (k, n_splits).
+    final_model_error (float): Relative error of the final model.
+    filename (str): Filename to save the plot.
+
+    Returns:
+    None
+    """
+    
+    fig, ax = plt.subplots(figsize=(10, 4))
+    for n_splits in results_df['n_splits'].unique():
+        subset = results_df[results_df['n_splits'] == n_splits]
+        ax.plot(subset['k'], subset['Avg_Train_Error'], marker='o', label=f'Train Error (n_splits={n_splits})')
+        ax.plot(subset['k'], subset['Avg_Val_Error'], marker='o', linestyle='--', label=f'Val Error (n_splits={n_splits})')
+    #ax.axhline(final_model_error, color='red', linestyle='--', label='Final Model Error')
+    ax.plot(optimal_hyperparams['k'], final_model_error, marker='*', color='blue', markersize=15, label='Final Model Test Error')
+
+    ax.set_title('Training, Validation, and Test Errors vs Number of Components (k)')
+    ax.set_xlabel('Number of Components (k)')
+    ax.set_ylabel('Relative Error')
+    ax.legend(bbox_to_anchor=(1.0, 1), loc='upper left')
+    ax.grid()
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.show()
 
 
 
