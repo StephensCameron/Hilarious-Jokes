@@ -70,10 +70,23 @@ def main():
             complement_indices, 'Average_Training_and_Validation_Error_vs_k.png')
     
     optimal_hyperparams = results_df.loc[results_df['Avg_Val_Error'].idxmin()]
+    # Optimal Hyperparameters: k=5.0, n_splits=3.0, Avg Train Error=0.352568568245995, Avg Val Error=0.4238408586782927
+    #print(f"Optimal Hyperparameters: k={optimal_hyperparams['k']}, n_splits={optimal_hyperparams['n_splits']}, "
+    #      f"Avg Train Error={optimal_hyperparams['Avg_Train_Error']}, Avg Val Error={optimal_hyperparams['Avg_Val_Error']}")
+    
+    """
+    These are the optimal hyperparameters we found using grid search when purely looking at minimizing the validation error..
+    However, we can see that for k=5, the training error low, and the validation error is not decreasing significantly with increasing k.
+    This is where we have to exersize some careful judgement, in k value selection.
+    I argue that fewer dimensions is optimal for a linear model, but I would prefer not to use k=1, as it is too simplistic.
+    I will select k=2, as it can keep the model slightly more complex, while still avoiding overfitting.
+    """
+
+    # Reselect the optimal hyperparameters for the final model
+    optimal_hyperparams = results_df.loc[(results_df['k'] == 2) & (results_df['n_splits'] == 10)].iloc[0]
     print(f"Optimal Hyperparameters: k={optimal_hyperparams['k']}, n_splits={optimal_hyperparams['n_splits']}, "
           f"Avg Train Error={optimal_hyperparams['Avg_Train_Error']}, Avg Val Error={optimal_hyperparams['Avg_Val_Error']}")
-    
-    # Optimal Hyperparameters: k=5.0, n_splits=3.0, Avg Train Error=0.352568568245995, Avg Val Error=0.4238408586782927
+
 
     """We've used the grid search to find the optimal hyperparameters for our model, so now we select 
     the optimal k and n_splits values to train our final model and evaluate it on the test set.
@@ -92,9 +105,9 @@ def main():
     print(f"Training Relative Error: {train_relative_error}")
     print(f"The model performed: {test_val_relative_difference*100:.2f} % worse on the test set than on the validation set.")
 
-    #Test Relative Error: 0.4357707780985749
-    #Training Relative Error: 0.3663375252693526
-    #The Model Performed: 2.81 % worse on the test set than on the validation set.
+    # Test Relative Error: 0.4361497785385321
+    # Training Relative Error: 0.3908652097733921
+    # The model performed: 1.86 % worse on the test set than on the validation set.
 
     plot_grid_with_final_model_results(results_df, optimal_hyperparams, test_relative_error, 'final_model_test_results.png')
 
