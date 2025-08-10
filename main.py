@@ -8,6 +8,104 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import KFold
 
 
+def main():
+    """
+    Main function to execute script. Basic workflow is:
+    1. Load the dataset
+    2. Split the dataset into training, validation, and test sets
+    3. Plot explained variance against the number of components to gain insights on structure of data and optimal number of clusters.
+    4. Visualize Cluster Data
+    5. Define Cross-Validation Routine
+        5a. Use Scikit-Learn's k-fold routine
+    6. Define Model Training Function
+        6a. Apply PCA to reduce dimensionality
+        6b. Solve for the optimal model using a linear least-squares model
+    7. Define Model Evaluation Function
+        7a. Using relative error in the Frobenius norm as our measurement of error
+    8. Use a Grid-Search Method to search for the optimal hyperparameters of number of folds (n_split) and model dimension (k)
+    9. Train the final model using the optimal hyperparameters and evaluate it on the test set
+    10. Save the model for future use
+    11. Draw conclusions based on the results
+    
+    """
+    # Load and split the data
+    joke_dataset, train_dataset_full, train_dataset, val_dataset, test_dataset = load_and_split_data()
+
+    # Print the shapes of the datasets
+    print(f"Full dataset shape: {joke_dataset.shape}")
+    print(f"Training dataset shape: {train_dataset_full.shape}")
+    print(f"Training set shape: {train_dataset.shape}")
+    print(f"Validation set shape: {val_dataset.shape}")
+    print(f"Test set shape: {test_dataset.shape}")
+
+    # Plot explained variance vs number of components
+    plot_explained_variance_vs_components(train_dataset,'explained_variance_vs_components.png')
+    """If we apply the elbow method, we can see that the optimal number of clusters is around 4 or 5.
+    One interpretation of this fact is that we have either 4 or 5 different types of jokes in the dataset."""
+
+    plot_explained_variance_vs_components(train_dataset_full,'explained_variance_vs_components_full.png')
+
+    plot_explained_variance_vs_components(train_dataset_full.T,'explained_variance_vs_components_full_transposed.png')
+    """When we apply the same method to the transposed dataset, we are actually investigating the people who rated the jokes more than the jokes.
+    From this plot, we could interpre that there are 6 or 7 different 'senses of humor' in the dataset."""
+
+    # here we will add clustering visualizations
+
+
+    ####### Predictive Model Section #######
+
+    """
+    We will first look at a linear model for predicting a joke rater's response to the last 26 jokes, based on the first 16
+    This next section will combine steps 5, 6, and 7.
+    """
+    # Select indices for training and complementary datasets
+    # We will select 16 jokes for the input (X) and the remaining jokes for the output (Y)
+    selected_indices, complement_indices, JTrain_x, JTrain_y, JTest_x, JTest_y = select_train_complement_indices(
+        joke_dataset, train_dataset_full, train_dataset, val_dataset, test_dataset, cross_validation=True)
+
+    # now we can grid search for the optimal hyperparameters
+    n_splits = [3, 5, 10]  # Different numbers of folds for cross-validation
+    k_values = range(1, 16)  # Different numbers of components to try
+    results_df = grid_search_hyperparams(k_values, train_dataset_full, selected_indices,
+            complement_indices, 'grid_search_results_verA.png')
+    
+    optimal_hyperparams = results_df.loc[results_df['Avg_Val_Error'].idxmin()]
+    print(f"Optimal Hyperparameters: k={optimal_hyperparams['k']}, n_splits={optimal_hyperparams['n_splits']}, "
+          f"Avg Train Error={optimal_hyperparams['Avg_Train_Error']}, Avg Val Error={optimal_hyperparams['Avg_Val_Error']}")
+    
+    # Optimal Hyperparameters: k=5.0, n_splits=3.0, Avg Train Error=0.352568568245995, Avg Val Error=0.4238408586782927
+
+    """We've used the grid search to find the optimal hyperparameters for our model, so now we select 
+    the optimal k and n_splits values to train our final model and evaluate it on the test set.
+    Note: techically n_splits is not a hyperparameter, but grid search is still applicable to compare different k value
+    while examing how different n_splits values affect the temporary model performance.. (as expected, for a very small dataset, more folds tends to be better)"""
+
+    optimal_k = int(optimal_hyperparams['k'])
+    optimal_n_splits = int(optimal_hyperparams['n_splits'])
+    
+    model = train_model(JTrain_x, JTrain_y, optimal_k)
+    test_relative_error = evaluate_model(model, JTest_x, JTest_y)
+    train_relative_error = evaluate_model(model, JTrain_x, JTrain_y)
+    test_val_relative_difference = (test_relative_error - optimal_hyperparams['Avg_Val_Error']) / optimal_hyperparams['Avg_Val_Error']
+
+    print(f"Test Relative Error: {test_relative_error}")
+    print(f"Training Relative Error: {train_relative_error}")
+    print(f"The model performed: {test_val_relative_difference*100:.2f} % worse on the test set than on the validation set.")
+
+    #Test Relative Error: 0.4357707780985749
+    #Training Relative Error: 0.3663375252693526
+    #The Model Performed: 2.81 % worse on the test set than on the validation set.
+
+    """We expect the test error to be higher than the validation error, as the model has not seen the test data during training,
+    though, I am surprised that the test error is only slightly higher than the validation error, it means that the model is generalizing well to unseen data.
+    This is a good sign that the model is not overfitting to the training data, and that the data collected is pretty good """
+
+    # Save the model for future use
+    np.save('linear_model_by_crossvalidation.npy', model)
+
+
+
+
 # Loads the dataset and data preprocessing section
 def load_and_split_data():
     """
@@ -25,7 +123,7 @@ def load_and_split_data():
     """
     
     # Load the dataset
-    joke_dataset = pd.read_csv('JTrain.csv') #full dataset
+    joke_dataset = pd.read_csv('jokeRatings.csv') #full dataset
 
     # split the dataset into training and testing sets
     train_size = int(0.8 * len(joke_dataset))
@@ -281,100 +379,6 @@ def grid_search_hyperparams(k_values, train_dataset_full, selected_indices, comp
 
     return results_df
 
-def main():
-    """
-    Main function to execute script. Basic workflow is:
-    1. Load the dataset
-    2. Split the dataset into training, validation, and test sets
-    3. Plot explained variance against the number of components to gain insights on structure of data and optimal number of clusters.
-    4. Visualize Cluster Data
-    5. Define Cross-Validation Routine
-        5a. Use Scikit-Learn's k-fold routine
-    6. Define Model Training Function
-        6a. Apply PCA to reduce dimensionality
-        6b. Solve for the optimal model using a linear least-squares model
-    7. Define Model Evaluation Function
-        7a. Using relative error in the Frobenius norm as our measurement of error
-    8. Use a Grid-Search Method to search for the optimal hyperparameters of number of folds (n_split) and model dimension (k)
-    9. Train the final model using the optimal hyperparameters and evaluate it on the test set
-    10. Save the model for future use
-    11. Draw conclusions based on the results
-    
-    """
-    # Load and split the data
-    joke_dataset, train_dataset_full, train_dataset, val_dataset, test_dataset = load_and_split_data()
-
-    # Print the shapes of the datasets
-    print(f"Full dataset shape: {joke_dataset.shape}")
-    print(f"Training dataset shape: {train_dataset_full.shape}")
-    print(f"Training set shape: {train_dataset.shape}")
-    print(f"Validation set shape: {val_dataset.shape}")
-    print(f"Test set shape: {test_dataset.shape}")
-
-    # Plot explained variance vs number of components
-    plot_explained_variance_vs_components(train_dataset,'explained_variance_vs_components.png')
-    """If we apply the elbow method, we can see that the optimal number of clusters is around 4 or 5.
-    One interpretation of this fact is that we have either 4 or 5 different types of jokes in the dataset."""
-
-    plot_explained_variance_vs_components(train_dataset_full,'explained_variance_vs_components_full.png')
-
-    plot_explained_variance_vs_components(train_dataset_full.T,'explained_variance_vs_components_full_transposed.png')
-    """When we apply the same method to the transposed dataset, we are actually investigating the people who rated the jokes more than the jokes.
-    From this plot, we could interpre that there are 6 or 7 different 'senses of humor' in the dataset."""
-
-    # here we will add clustering visualizations
-
-
-    ####### Predictive Model Section #######
-
-    """
-    We will first look at a linear model for predicting a joke rater's response to the last 26 jokes, based on the first 16
-    This next section will combine steps 5, 6, and 7.
-    """
-    # Select indices for training and complementary datasets
-    # We will select 16 jokes for the input (X) and the remaining jokes for the output (Y)
-    selected_indices, complement_indices, JTrain_x, JTrain_y, JTest_x, JTest_y = select_train_complement_indices(
-        joke_dataset, train_dataset_full, train_dataset, val_dataset, test_dataset, cross_validation=True)
-
-    # now we can grid search for the optimal hyperparameters
-    n_splits = [3, 5, 10]  # Different numbers of folds for cross-validation
-    k_values = range(1, 16)  # Different numbers of components to try
-    results_df = grid_search_hyperparams(k_values, train_dataset_full, selected_indices,
-            complement_indices, 'grid_search_results_verA.png')
-    
-    optimal_hyperparams = results_df.loc[results_df['Avg_Val_Error'].idxmin()]
-    print(f"Optimal Hyperparameters: k={optimal_hyperparams['k']}, n_splits={optimal_hyperparams['n_splits']}, "
-          f"Avg Train Error={optimal_hyperparams['Avg_Train_Error']}, Avg Val Error={optimal_hyperparams['Avg_Val_Error']}")
-    
-    # Optimal Hyperparameters: k=5.0, n_splits=3.0, Avg Train Error=0.352568568245995, Avg Val Error=0.4238408586782927
-
-    """We've used the grid search to find the optimal hyperparameters for our model, so now we select 
-    the optimal k and n_splits values to train our final model and evaluate it on the test set.
-    Note: techically n_splits is not a hyperparameter, but grid search is still applicable to compare different k value
-    while examing how different n_splits values affect the temporary model performance.. (as expected, for a very small dataset, more folds tends to be better)"""
-
-    optimal_k = int(optimal_hyperparams['k'])
-    optimal_n_splits = int(optimal_hyperparams['n_splits'])
-    
-    model = train_model(JTrain_x, JTrain_y, optimal_k)
-    test_relative_error = evaluate_model(model, JTest_x, JTest_y)
-    train_relative_error = evaluate_model(model, JTrain_x, JTrain_y)
-    test_val_relative_difference = (test_relative_error - optimal_hyperparams['Avg_Val_Error']) / optimal_hyperparams['Avg_Val_Error']
-
-    print(f"Test Relative Error: {test_relative_error}")
-    print(f"Training Relative Error: {train_relative_error}")
-    print(f"The model performed: {test_val_relative_difference*100:.2f} % worse on the test set than on the validation set.")
-
-    #Test Relative Error: 0.4357707780985749
-    #Training Relative Error: 0.3663375252693526
-    #The Model Performed: 2.81 % worse on the test set than on the validation set.
-
-    """We expect the test error to be higher than the validation error, as the model has not seen the test data during training,
-    though, I am surprised that the test error is only slightly higher than the validation error, it means that the model is generalizing well to unseen data.
-    This is a good sign that the model is not overfitting to the training data, and that the data collected is pretty good """
-
-    # Save the model for future use
-    np.save('linear_model_by_crossvalidation.npy', model)
 
 
 
