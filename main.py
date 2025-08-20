@@ -3,12 +3,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy
 from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
 from sklearn.feature_selection import f_classif
+from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import KFold
 
 
-def main():
+def main_execute():
     """
     Main function to execute script. Basic workflow is:
     1. Load the dataset
@@ -38,16 +40,18 @@ def main():
     print(f"Validation set shape: {val_dataset.shape}")
     print(f"Test set shape: {test_dataset.shape}")
 
-    # Plot explained variance vs number of components
-    plot_explained_variance_vs_components(train_dataset,'explained_variance_vs_components_partial.png')
-    """If we apply the elbow method, we can see that the optimal number of clusters is around 4 or 5.
-    One interpretation of this fact is that we have either 4 or 5 different types of jokes in the dataset."""
 
-    plot_explained_variance_vs_components(train_dataset_full,'explained_variance_vs_components_full.png')
 
-    plot_explained_variance_vs_components(train_dataset_full.T,'explained_variance_vs_components_full_transposed.png')
-    """When we apply the same method to the transposed dataset, we are actually investigating the people who rated the jokes more than the jokes.
-    From this plot, we could interpre that there are 6 or 7 different 'senses of humor' in the dataset."""
+    # # Plot explained variance vs number of components
+    # plot_explained_variance_vs_components(train_dataset,'explained_variance_vs_components_partial.png')
+    # """If we apply the elbow method, we can see that the optimal number of clusters is around 4 or 5.
+    # One interpretation of this fact is that we have either 4 or 5 different types of jokes in the dataset."""
+
+    # plot_explained_variance_vs_components(train_dataset_full,'explained_variance_vs_components_full.png')
+
+    # plot_explained_variance_vs_components(train_dataset_full.T,'explained_variance_vs_components_full_transposed.png')
+    # """When we apply the same method to the transposed dataset, we are actually investigating the people who rated the jokes more than the jokes.
+    # From this plot, we could interpre that there are 6 or 7 different 'senses of humor' in the dataset."""
 
     # here I will add clustering visualizations
 
@@ -63,6 +67,18 @@ def main():
     selected_indices, complement_indices, JTrain_x, JTrain_y, JTest_x, JTest_y = select_train_complement_indices(
         joke_dataset, train_dataset_full, train_dataset, val_dataset, test_dataset, cross_validation=True)
 
+    # # Plot of explained variance percentage vs components
+    # explained_variance_vs_k(train_dataset_full[:, selected_indices])
+    # explained_variance_vs_k(train_dataset_full[:, complement_indices])
+    # explained_variance_vs_k(train_dataset_full)
+
+    xtrain = train_dataset[:, selected_indices]
+    ytrain = train_dataset[:, complement_indices]
+    xval = val_dataset[:, selected_indices]
+    yval = val_dataset[:, complement_indices]
+    n_components_list = np.arange(1, 17)
+    plot_PCA_RMSE(xtrain, ytrain, xval, yval, n_components_list=n_components_list)
+
     # now we can grid search for the optimal hyperparameters
     n_splits = [3, 5, 10]  # Different numbers of folds for cross-validation
     k_values = range(1, 16)  # Different numbers of components to try
@@ -74,13 +90,13 @@ def main():
     #print(f"Optimal Hyperparameters: k={optimal_hyperparams['k']}, n_splits={optimal_hyperparams['n_splits']}, "
     #      f"Avg Train Error={optimal_hyperparams['Avg_Train_Error']}, Avg Val Error={optimal_hyperparams['Avg_Val_Error']}")
     
-    """
-    These are the optimal hyperparameters we found using grid search when purely looking at minimizing the validation error..
-    However, we can see that for k=5, the training error low, and the validation error is not decreasing significantly with increasing k.
-    This is where we have to exersize some careful judgement, in k value selection.
-    I argue that fewer dimensions is optimal for a linear model, but I would prefer not to use k=1, as it is too simplistic.
-    I will select k=2, as it can keep the model slightly more complex, while still avoiding overfitting.
-    """
+    # """
+    # These are the optimal hyperparameters we found using grid search when purely looking at minimizing the validation error..
+    # However, we can see that for k=5, the training error low, and the validation error is not decreasing significantly with increasing k.
+    # This is where we have to exersize some careful judgement, in k value selection.
+    # I argue that fewer dimensions is optimal for a linear model, but I would prefer not to use k=1, as it is too simplistic.
+    # I will select k=2, as it can keep the model slightly more complex, while still avoiding overfitting.
+    # """
 
     # Reselect the optimal hyperparameters for the final model
     optimal_hyperparams = results_df.loc[(results_df['k'] == 2) & (results_df['n_splits'] == 10)].iloc[0]
@@ -88,17 +104,17 @@ def main():
           f"Avg Train Error={optimal_hyperparams['Avg_Train_Error']}, Avg Val Error={optimal_hyperparams['Avg_Val_Error']}")
 
 
-    """We've used the grid search to find the optimal hyperparameters for our model, so now we select 
-    the optimal k and n_splits values to train our final model and evaluate it on the test set.
-    Note: techically n_splits is not a hyperparameter, but grid search is still applicable to compare different k value
-    while examing how different n_splits values affect the temporary model performance.. (as expected, for a very small dataset, more folds tends to be better)"""
+    # """We've used the grid search to find the optimal hyperparameters for our model, so now we select 
+    # the optimal k and n_splits values to train our final model and evaluate it on the test set.
+    # Note: techically n_splits is not a hyperparameter, but grid search is still applicable to compare different k value
+    # while examing how different n_splits values affect the temporary model performance.. (as expected, for a very small dataset, more folds tends to be better)"""
 
     optimal_k = int(optimal_hyperparams['k'])
     optimal_n_splits = int(optimal_hyperparams['n_splits'])
-    
-    model = train_model(JTrain_x, JTrain_y, optimal_k)
-    test_relative_error = evaluate_model(model, JTest_x, JTest_y)
-    train_relative_error = evaluate_model(model, JTrain_x, JTrain_y)
+
+    model, mu_x, V_T_k = train_model(JTrain_x, JTrain_y, optimal_k)
+    test_relative_error = evaluate_model(model, JTest_x, JTest_y, mu_x, V_T_k)
+    train_relative_error = evaluate_model(model, JTrain_x, JTrain_y, mu_x, V_T_k)
     test_val_relative_difference = (test_relative_error - optimal_hyperparams['Avg_Val_Error']) / optimal_hyperparams['Avg_Val_Error']
 
     print(f"Test Relative Error: {test_relative_error}")
@@ -109,14 +125,14 @@ def main():
     # Training Relative Error: 0.3908652097733921
     # The model performed: 1.86 % worse on the test set than on the validation set.
 
-    plot_grid_with_final_model_results(results_df, optimal_hyperparams, test_relative_error, 'final_model_test_results.png')
+    plot_grid_with_final_model_results(results_df, optimal_hyperparams, test_relative_error, 'final_model_test_results_2.png')
 
-    """We expect the test error to be higher than the validation error, as the model has not seen the test data during training,
-    though, I am surprised that the test error is only slightly higher than the validation error, it means that the model is generalizing well to unseen data.
-    This is a good sign that the model is not overfitting to the training data, and that the data collected is pretty good """
+    # """We expect the test error to be higher than the validation error, as the model has not seen the test data during training,
+    # though, I am surprised that the test error is only slightly higher than the validation error, it means that the model is generalizing well to unseen data.
+    # This is a good sign that the model is not overfitting to the training data, and that the data collected is pretty good """
 
     # Save the model for future use
-    np.save('linear_model_by_crossvalidation.npy', model)
+#    np.save('linear_model_by_crossvalidation.npy', model)
 
 
 
@@ -197,7 +213,7 @@ def plot_explained_variance_vs_components(train_dataset, filename='explained_var
     plt.ylabel('Mean ANOVA F-score')
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig(filename)
+    #plt.savefig(filename)
     plt.show()
 
 
@@ -275,15 +291,18 @@ def train_model(x_train, y_train, k):
     U_k = U[:, :k]
     S_k = np.diag(S[:k])
     V_T_k = V_T[:k, :]
-    
-    x_reduced = np.dot(U_k, np.dot(S_k, V_T_k))
-    x_reduced = np.hstack((x_reduced, np.ones((x_reduced.shape[0], 1))))  # Add bias term
-    
-    model = np.linalg.lstsq(x_reduced, y_train, rcond=None)[0]
-    
-    return model
 
-def evaluate_model(model, x_data, y_data):
+    mu_x = np.mean(x_train, axis=0)
+    x_train = x_train - mu_x  # Center the data by subtracting the mean
+    # x_reduced = np.dot(U_k, np.dot(S_k, V_T_k))
+    x_reduced = x_train @ V_T_k.T  # Project x_train onto the first k components
+    x_reduced = np.hstack((x_reduced, np.ones((x_reduced.shape[0], 1))))  # Add bias term
+
+    model = np.linalg.lstsq(x_reduced, y_train, rcond=None)[0]
+
+    return model, mu_x, V_T_k
+
+def evaluate_model(model, x_data, y_data, mu_x, V_T_k):
     """
     Evaluate the model on validation data by calculating the relative error in the Frobenius norm.
     
@@ -295,8 +314,9 @@ def evaluate_model(model, x_data, y_data):
     Returns:
     float: Relative error of the model predictions.
     """
-
-    x_val_reduced = np.column_stack((x_data, np.ones(x_data.shape[0])))
+    x_val_reduced = x_data - mu_x  # Center the data by subtracting the mean
+    x_val_reduced = x_val_reduced @ V_T_k.T  # Project x_val onto the first k components
+    x_val_reduced = np.hstack((x_val_reduced, np.ones((x_val_reduced.shape[0], 1))))
     y_data_pred = x_val_reduced @ model
     
     relative_error = np.linalg.norm(y_data - y_data_pred, 'fro') / np.linalg.norm(y_data, 'fro')
@@ -333,9 +353,9 @@ def cross_validate_model(data, selected_indices, complement_indices, k, n_splits
         JDev_x = X_val[:, selected_indices]
         JDev_y = X_val[:, complement_indices]
 
-        model = train_model(JTrain_x, JTrain_y, k)
-        train_relative_error = evaluate_model(model, JTrain_x, JTrain_y)
-        val_relative_error = evaluate_model(model, JDev_x, JDev_y)
+        model, mu_x, V_T_k = train_model(JTrain_x, JTrain_y, k)
+        train_relative_error = evaluate_model(model, JTrain_x, JTrain_y, mu_x, V_T_k)
+        val_relative_error = evaluate_model(model, JDev_x, JDev_y, mu_x, V_T_k)
 
         all_models.append(model)
         all_relative_errors_training.append(train_relative_error)
@@ -346,6 +366,30 @@ def cross_validate_model(data, selected_indices, complement_indices, k, n_splits
     avg_val_error = np.mean(all_relative_errors_validation)
 
     return avg_model, avg_train_error, avg_val_error
+
+def explained_variance_vs_k(training_dataset):
+    """
+    Plot the explained variance as a function of the number of components (k) for PCA.
+    
+    Parameters:
+    training_dataset (numpy.ndarray): The training dataset.
+    
+    Returns:
+    None
+    """
+    pca = PCA()
+    pca.fit(training_dataset)
+    k = np.arange(1, len(pca.explained_variance_ratio_) + 1)
+
+    plt.figure(figsize=(8, 4))
+    plt.plot(k, np.cumsum(pca.explained_variance_ratio_), marker='o')
+    plt.title('Explained Variance vs. Number of Components')
+    plt.xlabel('Number of Components')
+    plt.ylabel('Cumulative Explained Variance')
+    plt.grid()
+    plt.tight_layout()
+    # plt.savefig('explained_variance_vs_k.png')
+    plt.show()
 
 def grid_search_hyperparams(k_values, n_splits_list, train_dataset_full, selected_indices, complement_indices,
             filename='grid_search_results.png'):
@@ -390,7 +434,7 @@ def grid_search_hyperparams(k_values, n_splits_list, train_dataset_full, selecte
     #ax.legend()
     ax.grid()
     plt.tight_layout()
-    plt.savefig(filename)
+    #plt.savefig(filename)
     plt.show()
 
     return results_df
@@ -426,7 +470,73 @@ def plot_grid_with_final_model_results(results_df, optimal_hyperparams, final_mo
     plt.savefig(filename)
     plt.show()
 
+def create_PCA_linear_model_scikit(xtrain, ytrain, n_components):
+    pca = PCA(n_components=n_components)
+    xtrain_pca = pca.fit_transform(xtrain)
+    model = LinearRegression()
+    model.fit(xtrain_pca, ytrain)
+    return model, pca
+
+def evaluate_PCA_linear_model_scikit(model, xdata, ydata):
+    pca = PCA(n_components=model.n_components_)
+    xdata_pca = pca.fit_transform(xdata)
+    return model.score(xdata_pca, ydata)
+
+def plot_PCA_RMSE(xtrain, ytrain, xval, yval, n_components_list):
+    train_errors = []
+    val_errors = []
+    test_errors = []
+
+    # first center the data with respect to xtrain
+    xtrain_centered = xtrain - np.mean(xtrain, axis=0)
+    xval_centered = xval - np.mean(xtrain, axis=0)
+
+    for n_components in n_components_list:
+        # model, pca = create_PCA_linear_model_scikit(xtrain, ytrain, n_components)
+        # xreduced_train = pca.transform(xtrain)
+        # xreduced_val = pca.transform(xval)
+        # pca = PCA(n_components=n_components)
+
+        # train_error = np.dot(np.abs(model.predict(xreduced_train) - ytrain), ytrain.T) / np.dot(ytrain, ytrain.T)
+        # val_error = np.dot(np.abs(model.predict(xreduced_val) - yval), yval.T) / np.dot(yval, yval.T)
+
+        k = n_components
+        U, S, V_T = np.linalg.svd(xtrain_centered, full_matrices=False)
+        U_k = U[:, :k]
+        S_k = np.diag(S[:k])
+        V_T_k = V_T[:k, :]
+
+        # I need to get the projection matrix for xtrain_reduced = A*xtrain
+
+        #print(f'shape of mu_y: {mu_y.shape}')
+        xtrain_reduced = np.dot(U_k, np.dot(S_k, V_T_k))
+
+        xtrain_reduced = xtrain_centered @ V_T_k.T
+        print(f'shape of xtrain_reduced: {xtrain_reduced.shape}')
 
 
+        #xval_reduced = np.dot(U_k, np.dot(S_k, V_T_k))
+        xval_reduced = xval_centered @ V_T_k.T
+        print(f'shape of xval_reduced: {xval_reduced.shape}')
 
-main()
+        model = LinearRegression()
+        model.fit(xtrain_reduced, ytrain)
+
+        train_error = np.linalg.norm(np.abs(model.predict(xtrain_reduced) - ytrain), 'fro') / np.linalg.norm(ytrain, 'fro')
+        val_error = np.linalg.norm(np.abs(model.predict(xval_reduced) - yval), 'fro') / np.linalg.norm(yval, 'fro')
+
+        train_errors.append(train_error)
+        val_errors.append(val_error)
+
+    plt.figure(figsize=(10, 5))
+    plt.plot(n_components_list, train_errors, label='Train Error', marker='o')
+    plt.plot(n_components_list, val_errors, label='Validation Error', marker='o')
+    plt.xlabel('Number of Components')
+    plt.ylabel('RMSE')
+    plt.title('PCA Linear Model RMSE vs Number of Components')
+    plt.legend()
+    plt.grid()
+    plt.show()
+
+if __name__ == "__main__":
+    main_execute()
