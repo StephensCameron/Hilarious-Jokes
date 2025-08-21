@@ -15,4 +15,4 @@ This is a basic Machine-Learning analysis of hilarious-joke data that was collec
         - First, we reduce the dimensionality of the data using Principle Component Analysis
         - Then we compare how training and validation sets compare at different dimensions using cross-validation
         - Due to the small nature of our dataset (total features ~= total survey respondants), we error on the side of reducing dimension as much as possible and select a model that projects all data onto the first two principle components
-        - 
+        - ![For the final model we choose to project the X data onto a two-dimensional subspace](final_model_test_results.png)
