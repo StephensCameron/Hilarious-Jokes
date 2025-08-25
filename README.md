@@ -19,6 +19,10 @@ This is a basic Machine-Learning analysis of hilarious-joke data that was collec
     - Begin Neural Network Model:
         - The expectation is that a 'shallow' Neural Net in combination with PCA will yield results that do not overfit the training data and still have errors in validation data that are comparable to the training errors
         - To tune hyperparameters, we use cross-validation along with a grid-search method to find the combination of hyperparameters that minimize the validation error averaged across all training-validation folds in the data
-        - The optimal hyperparamters are: [n_deep_layers=2, nodes_per_layer=8, PCA_dimension=2, batch_size=8, num_epochs=50] with a relative error in the frobeneus norm of 0.467
-        - the large error in this is likely due to having such a small dataset
+        - The optimal hyperparamters are: [n_deep_layers=4, nodes_per_layer=16, PCA_dimension=3, batch_size=8, num_epochs=50] with a relative error in the frobeneus norm of 0.420 in the validation set and 0.391 in the training set
+        - Complicating the model beyond this point increases the validation error while decreasing the training error, indicating that our model is overfitting. 
+##
+- Future Steps: 
+    - An analysis of the results show that the models do an okay job at predicting the respondants' sentiment towards new jokes; however, the magnitude of the respondants' rating for an unseen joke is not predicted to a high degree of accuracy. I hypothesize that with better data preprocessing this issue can be improved. 
+    - The next step is to fit each surveyee's responses to a normal distribution. We will set all respondants' mean joke rating to 0.5, with a standard deviation of 0.15. All respondants' mean joke rating and standard deviation can be used later to transform back to the 1 to 10 scale given on the survey. 
         
